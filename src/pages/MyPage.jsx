@@ -43,22 +43,22 @@ function MyPage() {
         <div className="grid grid-cols-3 gap-2">
           {/* 샘플 그리드 아이템 */}
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="text-purple-700 text-xs">사진</span>
           </div>
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="text-purple-700 text-xs">사진</span>
           </div>
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="text-purple-700 text-xs">사진</span>
           </div>
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="text-purple-700 text-xs">사진</span>
           </div>
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="txst-purple-700 text-xs">사진</span>
           </div>
           <div className="aspect-square bg-purple-950 rounded-lg flex items-center justify-center">
-            <span className="test-purple-700 text-xs">사진</span>
+            <span className="text-purple-700 text-xs">사진</span>
           </div>
         </div>
       </div>

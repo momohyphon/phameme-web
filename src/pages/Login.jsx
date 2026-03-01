@@ -46,15 +46,15 @@ function Login() {
 
                 <button
                     onClick={handleLogin}
-                    className="full bg-purple-600 hover:bg-purple-400 text-white py-2 rounded-full transition mb-4 ml-auto block"
+                    className="w-full bg-purple-600 hover:bg-purple-400 text-white py-2 rounded-full transition mb-4 ml-auto block"
                 >
                     로그인
                 </button>
                 <p className="text-purple-600 text-sm text-center">
-                    계정이 없으신갸요?{""}
+                    계정이 없으신가요?{""}
                     <span 
                     onClick={() => navigate("/signup")}
-                    className="text-purple-400 cursor-pointer hover:underLine">
+                    className="text-purple-400 cursor-pointer hover:underline">
                         회원가입
                     </span>
                 </p>

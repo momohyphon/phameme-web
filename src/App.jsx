@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import MyPage from "./pages/MyPage";
 import Signup from "./pages/Signup";
 import Home from "./pages/Home";
+import BottomNav from "./pages/BottomNav";
 
 function App() {
   return (
@@ -14,9 +15,9 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/mypage" element={<MyPage />} />
       </Routes>
+      <BottomNav />
     </BrowserRouter>
   );
 }
-
 
 export default App;
