@@ -58,7 +58,7 @@ function Home() {
             style={{
               borderColor: currentColor,
               color: currentColor,
-              transiton: "border-color 1s ease, color 1s ease",
+              transition: "border-color 1s ease, color 1s ease",
             }}
             className="mt-2 border px-6 py-2 rounded-full text-sm font-bold transition"
           >
