@@ -1,16 +1,42 @@
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 
 function Home() {
+  const neonColors = ["#7C3AED", "#EC4899", "#F97316", "#3B82F6", "#10B981"];
+  const [colorIndex, setColorIndex] = useState(0);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setColorIndex((prev) => (prev + 1) % neonColors.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentColor = neonColors[colorIndex];
   return (
-    <div className="min-h-screen bg-black text-white">
-      <header className="border-b border-purple-500 px-4 py-3 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-purple-400 tracking-widest">
-          PHAMEME
+    <div className="min-h-screen bg-white text-black">
+      <header
+        style={{
+          borderColor: currentColor,
+          transition: "border-color 1s ease",
+        }}
+        className="border-b px-4 py-3 flex justify-between items-center"
+      >
+        <h1
+          style={{ color: currentColor, transition: "color 1s ease" }}
+          className="text-xl font-bold tracking-widest"
+        >
+          Phameme
         </h1>
 
         <button
-          className="border border-purple-500 text-purple-400 px-4 py-1 rounded-full hover:bg-purple-500 hover:text-black transition"
+          style={{
+            borderColor: currentColor,
+            color: currentColor,
+            transition: "border-color 1s ease, color 1s ease",
+          }}
+          className="border px-4 rounded-full transition"
           onClick={() => navigate("/login")}
         >
           로그인
@@ -18,40 +44,81 @@ function Home() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 pb-32">
-        <div className="border border-purple-500 rounded-xl p-4 mb-6 text-center shadow-lg shadow-purple-900 ">
-          <p className="text-purple-300 text-sm">오늘의 착샷을 올려보세요</p>
-          <button className="mt-2 bg-purple-600 hover:bg-purple-400 text-white px-6 py-2 rounded-full text-sm transition">
+        <div
+          style={{
+            borderColor: currentColor,
+            transition: "border-color 1s ease",
+          }}
+          className="border-2 rounded-xl p-4 mb-6 text-center shadow-md"
+        >
+          <p style={{ color: currentColor }} className="text-sm font-bold">
+            오늘의 착샷을 올려보세요
+          </p>
+          <button
+            style={{
+              borderColor: currentColor,
+              color: currentColor,
+              transiton: "border-color 1s ease, color 1s ease",
+            }}
+            className="mt-2 border px-6 py-2 rounded-full text-sm font-bold transition"
+          >
             업로드
           </button>
         </div>
 
         <div className="space-y-6">
-          <div className="border border-purple-800 rounded-xl overflow-hidden shadow-md shadow-purple-900">
+          <div
+            style={{
+              borderColor: currentColor,
+              transition: "border-color 1s ease",
+            }}
+            className="border rounded-xl overflow-hidden shadow-md"
+          >
             <div className="flex items-center gap-2 px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-purple-500" />
-              <span className="text-purple-300">@user1</span>
+              <div
+                className="w-8 h-8 rounded-full bg-white border"
+                style={{ borderColor: currentColor }}
+              />
+              <span style={{ color: currentColor }}>@user1</span>
             </div>
 
-            <div className="w-full h-64 bg-purple-950 flex items-center justify-center">
-              <span className="text-purple-600 text-sm">사진영역</span>
+            <div className="w-full h-64 bg-white flex items-center justify-center">
+              <span style={{ color: currentColor }} className="text-sm">
+                사진영역
+              </span>
             </div>
             <div className="p-4 py-3 flex justify-between items-center">
-              <span className="text-purple-400 text-sm">AI점수: 8.5</span>
-              <span className="text-purple-600 text-xs">조회수 1,234</span>
+              <span style={{ color: currentColor }} className="text-sm">
+                AI점수: 8.5
+              </span>
+              <span className="text-gray-400 text-xs">조회수 1,234</span>
             </div>
           </div>
 
-          <div className="border border-purple-800 rounded-xl overflow-hidden shadow-md shadow-purple-900">
+          <div
+            style={{
+              borderColor: currentColor,
+              transition: "border-color 1s ease",
+            }}
+            className="border rounded-xl overflow-hidden shadow-md"
+          >
             <div className="flex items-center gap-2 px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-purple-400" />
-              <span className="text-sm text-purple-300">@user2</span>
+              <div
+                className="w-8 h-8 rounded-full bg-white border"
+                style={{ borderColor: currentColor }}
+              />
+              <span style={{ color: currentColor }} className="text-sm">
+                @user2
+              </span>
             </div>
-            <div className="w-full h-64 bg-purple-950 flex items-center justify-center">
-              <span className="text-purple-600">사진영역</span>
+            <div className="w-full h-64 bg-white flex items-center justify-center">
+              <span style={{ color: currentColor }}>사진영역</span>
             </div>
             <div className="px-4 py-3 flex justify-between items-center">
-              <span className="text-purple-400 text-sm">AI점수 7.2</span>
-              <span className="text-purple-600 text-xs">조회수</span>
+              <span style={{ color: currentColor }} className="text-sm">
+                AI점수 7.2
+              </span>
+              <span className="text-gray-400 text-xs">조회수</span>
             </div>
           </div>
         </div>
