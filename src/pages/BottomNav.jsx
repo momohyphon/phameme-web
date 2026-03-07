@@ -31,7 +31,7 @@ function BottomNav() {
           transition: "transform 0.8s ease-in-out",
           borderColor: currentColor,
         }}
-        className="flex justify-around items-center bg-white border-2 rounded-2xl px-4 py-1 shadow-2xl"
+        className="flex justify-around items-center bg-white border-2 rounded-2xl px-4 py-2 shadow-2xl"
       >
         <button
           onClick={() => navigate("/")}

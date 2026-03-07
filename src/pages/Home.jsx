@@ -21,7 +21,7 @@ function Home() {
           borderColor: currentColor,
           transition: "border-color 1s ease",
         }}
-        className="border-b px-4 py-3 flex justify-between items-center"
+        className="border-b px-4 pt-6 pb-3 flex justify-between items-center"
       >
         <h1
           style={{ color: currentColor, transition: "color 1s ease" }}
