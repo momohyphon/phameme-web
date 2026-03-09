@@ -1,16 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { collection, getDocs, orderBy, query, getDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 
 function Home() {
   const neonColors = ["#7C3AED", "#EC4899", "#F97316", "#3B82F6", "#10B981"];
   const [colorIndex, setColorIndex] = useState(0);
   const navigate = useNavigate();
-  // 게시물 목록
-  const [posts, setPosts] = useState([]);
-  // 유저 프로필 사진 목록
-  const [userProfiles, setUserProfiles] = useState({});
+  const [cards, setCards] = useState([]);
+  const [activeIndex, setActiveIndex] = useState({});
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -19,32 +17,36 @@ function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Firestore에서 게시물 + 유저 프로필 가져오기
   useEffect(() => {
-    const fetchPosts = async () => {
-      // posts 컬렉션 최신순으로 가져오기
-      const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+    const fetchCards = async () => {
+      const q = query(collection(db, "categories"));
       const snapshot = await getDocs(q);
-      // 각 게시물 데이터 배열로 변환
-      const postList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setPosts(postList);
+      const cardList = snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => b.createdAt?.toDate?.() - a.createdAt?.toDate?.());
 
-      // 각 게시물 유저 프로필 사진 가져오기
       const profiles = {};
-      for (const post of postList) {
-        // users 컬렉션에서 유저 정보 가져오기
-        const userDoc = await getDoc(doc(db, "users", post.userId));
-        if (userDoc.exists()) {
-          // 유저 프로필 사진 URL 저장
-          profiles[post.userId] = userDoc.data().photoURL;
+      for (const card of cardList) {
+        if (!profiles[card.userId]) {
+          const userDoc = await getDoc(doc(db, "users", card.userId));
+          if (userDoc.exists()) {
+            profiles[card.userId] = userDoc.data().photoURL;
+          }
         }
       }
-      setUserProfiles(profiles);
+
+      const cardsWithPhotos = cardList.map((card) => {
+        const photos = (card.slots || []).filter((slot) => slot !== null && typeof slot === "string");
+        return {
+          ...card,
+          photos,
+          profilePhoto: profiles[card.userId] || null,
+        };
+      }).filter((card) => card.photos.length > 0);
+
+      setCards(cardsWithPhotos);
     };
-    fetchPosts();
+    fetchCards();
   }, []);
 
   const currentColor = neonColors[colorIndex];
@@ -71,7 +73,6 @@ function Home() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 pb-32">
-        {/* 업로드 유도 카드 */}
         <div
           style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
           className="border-2 rounded-xl p-4 mb-6 text-center shadow-md"
@@ -88,49 +89,111 @@ function Home() {
           </button>
         </div>
 
-        {/* 게시물 목록 */}
         <div className="space-y-6">
-          {posts.length === 0 ? (
-            // 게시물 없을때
+          {cards.length === 0 ? (
             <p style={{ color: currentColor }} className="text-center text-sm">
               아직 게시물이 없어요!
             </p>
           ) : (
-            posts.map((post) => (
-              <div
-                key={post.id}
-                style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-                className="border rounded-xl overflow-hidden shadow-md"
-              >
-                {/* 유저 정보 */}
-                <div className="flex items-center gap-2 px-4 py-3">
-                  {/* 프로필 사진 */}
-                  <div
-                    className="w-8 h-8 rounded-full bg-white border overflow-hidden"
-                    style={{ borderColor: currentColor }}
-                  >
-                    {userProfiles[post.userId] ? (
-                      <img src={userProfiles[post.userId]} className="w-full h-full object-cover" />
-                    ) : null}
+            cards.map((card) => {
+              const currentIdx = activeIndex[card.id] ?? 0;
+              return (
+                <div
+                  key={card.id}
+                  style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
+                  className="border rounded-xl overflow-hidden shadow-md"
+                >
+                  <div className="relative">
+                    <div
+                      className="absolute top-0 left-0 z-10 w-full flex items-center gap-2 px-4 py-3"
+                      style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.4), transparent)" }}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full border overflow-hidden flex-shrink-0"
+                        style={{ borderColor: currentColor }}
+                      >
+                        {card.profilePhoto && (
+                          <img src={card.profilePhoto} className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <span className="text-sm text-white font-semibold drop-shadow">
+                        @{card.userEmail?.split("@")[0]}
+                      </span>
+                    </div>
+
+                    <div
+                      className="w-full overflow-hidden cursor-grab"
+                      style={{ aspectRatio: "4/5" }}
+                      onTouchStart={(e) => {
+                        e.currentTarget.dataset.startX = e.touches[0].clientX;
+                      }}
+                      onTouchEnd={(e) => {
+                        const startX = parseFloat(e.currentTarget.dataset.startX || 0);
+                        const diff = startX - e.changedTouches[0].clientX;
+                        if (Math.abs(diff) < 50) return;
+                        setActiveIndex((prev) => {
+                          const current = prev[card.id] ?? 0;
+                          if (diff > 0) return { ...prev, [card.id]: Math.min(current + 1, card.photos.length - 1) };
+                          else return { ...prev, [card.id]: Math.max(current - 1, 0) };
+                        });
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.dataset.startX = e.clientX;
+                        e.currentTarget.dataset.dragging = "true";
+                      }}
+                      onMouseUp={(e) => {
+                        if (e.currentTarget.dataset.dragging !== "true") return;
+                        e.currentTarget.dataset.dragging = "false";
+                        const startX = parseFloat(e.currentTarget.dataset.startX || 0);
+                        const diff = startX - e.clientX;
+                        if (Math.abs(diff) < 50) return;
+                        setActiveIndex((prev) => {
+                          const current = prev[card.id] ?? 0;
+                          if (diff > 0) return { ...prev, [card.id]: Math.min(current + 1, card.photos.length - 1) };
+                          else return { ...prev, [card.id]: Math.max(current - 1, 0) };
+                        });
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.dataset.dragging = "false";
+                      }}
+                    >
+                      <img
+                        src={card.photos[currentIdx]}
+                        className="w-full h-full object-cover pointer-events-none"
+                      />
+                    </div>
+
+                    {card.photos.length > 1 && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
+                        {card.photos.map((url, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setActiveIndex((prev) => ({ ...prev, [card.id]: idx }))}
+                            className="flex-shrink-0"
+                          >
+                            <div
+                              style={{ border: idx === currentIdx ? `2px solid ${currentColor}` : "none" }}
+                              className="w-10 h-10 rounded-full overflow-hidden"
+                            >
+                              <img src={url} className="w-full h-full object-cover" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div
+                      className="absolute bottom-0 left-0 z-10 w-full px-4 py-3 flex justify-between items-center"
+                      style={{ background: "linear-gradient(to top, rgba(0,0,0,0.4), transparent)" }}
+                    >
+                      <span className="text-sm text-white drop-shadow">AI점수: -</span>
+                      <span className="text-xs text-white drop-shadow">조회수 -</span>
+                    </div>
                   </div>
-                  {/* 유저 이메일 */}
-                  <span style={{ color: currentColor }} className="text-sm">
-                    @{post.userEmail?.split("@")[0]}
-                  </span>
                 </div>
-
-                {/* 게시물 사진 */}
-                <div className="w-full h-64 bg-white overflow-hidden">
-                  <img src={post.photoURL} className="w-full h-full object-cover" />
-                </div>
-
-                {/* 하단 정보 */}
-                <div className="px-4 py-3 flex justify-between items-center">
-                  <span style={{ color: currentColor }} className="text-sm">AI점수: -</span>
-                  <span className="text-gray-400 text-xs">조회수 -</span>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </main>

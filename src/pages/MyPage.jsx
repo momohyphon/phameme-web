@@ -1,10 +1,10 @@
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, collection, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
 
 function MyPage() {
   const neonColors = ["#7C3AED", "#EC4899", "#F97316", "#3B82F6", "#10B981"];
@@ -12,10 +12,12 @@ function MyPage() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [profilePhoto, setProfilePhoto] = useState("");
-  // 업로드 중 상태
-  const [uploading, setUploading] = useState(false);
-  // 내 게시물 목록
-  const [myPosts, setMyPosts] = useState([]);
+  const [uploadingSlot, setUploadingSlot] = useState(null);
+  const [categories, setCategories] = useState([[null, null, null, null, null, null]]);
+  const [currentCategoryIdx, setCurrentCategoryIdx] = useState(0);
+  const fileInputRef = useRef(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [categoryIds, setCategoryIds] = useState([null]);
 
   const handleLogout = async () => {
     try {
@@ -43,6 +45,31 @@ function MyPage() {
         if (docSnap.exists()) {
           setProfilePhoto(docSnap.data().photoURL);
         }
+        const q = query(
+          collection(db, "categories"),
+          where("userId", "==", user.uid)
+        );
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+          setCategories([[null, null, null, null, null, null]]);
+          setCategoryIds([null]);
+        } else {
+          const cardList = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => a.createdAt?.toDate?.() - b.createdAt?.toDate?.());
+          const loadedCategories = cardList.map((cat) => {
+            const slots = [null, null, null, null, null, null];
+            if (cat.slots) {
+              cat.slots.forEach((slot, i) => {
+                if (i < 6) slots[i] = slot || null;
+              });
+            }
+            return slots;
+          });
+          setCategories(loadedCategories);
+          setCategoryIds(cardList.map((c) => c.id));
+          setCurrentCategoryIdx(loadedCategories.length - 1);
+        }
       }
     });
     return () => unsubscribe();
@@ -50,36 +77,92 @@ function MyPage() {
 
   const currentColor = neonColors[colorIndex];
 
-  // 착샷 업로드 함수
-  const handlePostUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
+  const handleSlotClick = (index) => {
+    setSelectedSlot(index);
+    fileInputRef.current.click();
+  };
+
+  const handleAddClick = () => {
+    const currentSlots = categories[currentCategoryIdx];
+    const firstEmpty = currentSlots.findIndex((c) => c === null);
+    if (firstEmpty === -1) {
+      alert("이 카테고리가 가득 찼습니다. 새 카테고리를 추가하세요.");
+      return;
+    }
+    setSelectedSlot(firstEmpty);
+    fileInputRef.current.click();
+  };
+
+  const handleAddCategory = () => {
+    const lastCategory = categories[categories.length - 1];
+    const isEmpty = lastCategory.every((slot) => slot === null);
+    if (isEmpty) {
+      alert("현재 카테고리에 사진을 먼저 추가하세요.");
+      return;
+    }
+    setCategories((prev) => [...prev, [null, null, null, null, null, null]]);
+    setCategoryIds((prev) => [...prev, null]);
+    setCurrentCategoryIdx(categories.length);
+  };
+
+  const handleFileChange = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length || selectedSlot === null) return;
+    setUploadingSlot(selectedSlot);
+
     try {
-      // Cloudinary에 업로드
+      // Cloudinary에 첫 번째 파일만 업로드
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", files[0]);
       formData.append("upload_preset", "phameme_upload");
       const res = await fetch("https://api.cloudinary.com/v1_1/dgibdjbtj/image/upload", {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
-      // Firestore posts 컬렉션에 저장
-      await addDoc(collection(db, "posts"), {
-        photoURL: data.secure_url,
-        userEmail: currentUser.email,
-        userId: currentUser.uid,
-        createdAt: new Date(),
+      if (!data.secure_url) throw new Error("Cloudinary 업로드 실패");
+      // 슬롯에 URL 문자열로 저장 - Firestore는 중첩 배열 미지원
+      const uploadedURL = data.secure_url;
+
+      const newCategories = categories.map((cat, ci) => {
+        if (ci !== currentCategoryIdx) return cat;
+        const newSlots = [...cat];
+        newSlots[selectedSlot] = uploadedURL;
+        return newSlots;
       });
-      // 업로드한 사진 바로 화면에 추가
-      setMyPosts((prev) => [data.secure_url, ...prev]);
+      setCategories(newCategories);
+
+      const currentCatId = categoryIds[currentCategoryIdx];
+      const slotsToSave = newCategories[currentCategoryIdx];
+
+      if (currentCatId) {
+        await updateDoc(doc(db, "categories", currentCatId), {
+          slots: slotsToSave,
+        });
+      } else {
+        const catRef = await addDoc(collection(db, "categories"), {
+          slots: slotsToSave,
+          userId: currentUser.uid,
+          userEmail: currentUser.email,
+          createdAt: new Date(),
+        });
+        setCategoryIds((prev) => {
+          const updated = [...prev];
+          updated[currentCategoryIdx] = catRef.id;
+          return updated;
+        });
+      }
       alert("업로드 완료!");
     } catch (err) {
-      alert("업로드 실패");
+      alert("업로드 실패: " + err.message);
     }
-    setUploading(false);
+
+    e.target.value = "";
+    setUploadingSlot(null);
+    setSelectedSlot(null);
   };
+
+  const currentSlots = categories[currentCategoryIdx] || [null, null, null, null, null, null];
 
   return (
     <div className="min-h-screen bg-white text-black">
@@ -112,9 +195,7 @@ function MyPage() {
       </header>
 
       <div className="w-full max-w-2xl mx-auto px-4 py-6 pb-32">
-        {/* 프로필 정보 */}
         <div className="flex items-center gap-6 mb-8">
-          {/* 프로필 사진 */}
           <div
             style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
             className="w-20 h-20 rounded-full border-2 bg-white overflow-hidden flex items-center justify-center"
@@ -125,7 +206,6 @@ function MyPage() {
               <span style={{ color: currentColor }} className="text-xs">사진</span>
             )}
           </div>
-          {/* 닉네임 및 통계 */}
           <div>
             <p style={{ color: currentColor }} className="text-xl font-bold mb-1">
               @{currentUser?.email?.split("@")[0]}님
@@ -135,47 +215,67 @@ function MyPage() {
           </div>
         </div>
 
-        {/* 내 착샷 헤더 */}
+        <div className="flex gap-2 mb-4 overflow-x-auto">
+          {categories.map((_, ci) => (
+            <button
+              key={ci}
+              onClick={() => setCurrentCategoryIdx(ci)}
+              style={{
+                borderColor: currentColor,
+                color: ci === currentCategoryIdx ? "white" : currentColor,
+                backgroundColor: ci === currentCategoryIdx ? currentColor : "white",
+              }}
+              className="border px-3 py-1 rounded-full text-xs flex-shrink-0 transition"
+            >
+              {ci + 1}번 카테고리
+            </button>
+          ))}
+          <button
+            onClick={handleAddCategory}
+            style={{ borderColor: currentColor, color: currentColor }}
+            className="border px-3 py-1 rounded-full text-xs flex-shrink-0"
+          >
+            + 새 카테고리
+          </button>
+        </div>
+
         <div className="flex items-center justify-between mb-4">
           <p style={{ color: currentColor }} className="text-sm">내 착샷</p>
-          {/* 사진 추가 버튼 */}
           <button
             style={{ borderColor: currentColor, color: currentColor }}
             className="border px-3 py-1 rounded-full text-sm"
-            onClick={() => document.getElementById("postUploadInput").click()}
+            onClick={handleAddClick}
           >
-            {uploading ? "업로드 중..." : "+ 사진 추가"}
+            + 사진 추가
           </button>
-          {/* 숨겨진 파일 input */}
-          <input
-            id="postUploadInput"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handlePostUpload}
-          />
         </div>
 
-        {/* 사진 그리드 */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
         <div className="grid grid-cols-3 gap-2">
-          {myPosts.map((url, index) => (
-            // 업로드한 사진 표시
-            <div
-              key={index}
-              style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-              className="aspect-square bg-white border rounded-lg overflow-hidden"
-            >
-              <img src={url} className="w-full h-full object-cover" />
-            </div>
-          ))}
-          {/* 사진 없을때 빈 칸 6개 */}
-          {myPosts.length === 0 && [...Array(6)].map((_, i) => (
+          {currentSlots.map((slot, i) => (
             <div
               key={i}
               style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-              className="aspect-square bg-white border rounded-lg flex items-center justify-center"
+              className="aspect-square bg-white border rounded-lg overflow-hidden flex items-center justify-center cursor-pointer"
+              onClick={() => handleSlotClick(i)}
             >
-              <span style={{ color: currentColor }} className="text-xs">사진</span>
+              {uploadingSlot === i ? (
+                <span style={{ color: currentColor }} className="text-xs">업로드 중...</span>
+              ) : slot ? (
+                // 슬롯에 URL 문자열 저장이므로 slot 그대로 사용
+                <img src={slot} className="w-full h-full object-cover" />
+              ) : i === 0 ? (
+                <span style={{ color: currentColor }} className="text-xs font-bold">Main +</span>
+              ) : (
+                <span style={{ color: currentColor }} className="text-xs">+</span>
+              )}
             </div>
           ))}
         </div>
