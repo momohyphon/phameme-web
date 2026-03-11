@@ -184,7 +184,7 @@ function MyPage() {
     }
     // 두 번째 클릭 - 선택된 슬롯 삭제 실행
     if (selectedForDelete.length === 0) {
-      alert("삭제할 사진을 선택하세요.");
+      setDeleteMode(false);
       return;
     }
     const newCategories = categories.map((cat, ci) => {
