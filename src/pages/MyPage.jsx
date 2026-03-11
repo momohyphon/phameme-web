@@ -18,6 +18,10 @@ function MyPage() {
   const fileInputRef = useRef(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [categoryIds, setCategoryIds] = useState([null]);
+  // 삭제 모드 상태 - true면 체크박스 표시
+  const [deleteMode, setDeleteMode] = useState(false);
+  // 선택된 삭제 슬롯 인덱스 목록
+  const [selectedForDelete, setSelectedForDelete] = useState([]);
 
   const handleLogout = async () => {
     try {
@@ -38,8 +42,11 @@ function MyPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
+        if (!user) {
+          navigate("/login");
+          return;
+        }
+        setCurrentUser(user);
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -70,7 +77,7 @@ function MyPage() {
           setCategoryIds(cardList.map((c) => c.id));
           setCurrentCategoryIdx(loadedCategories.length - 1);
         }
-      }
+       
     });
     return () => unsubscribe();
   }, []);
@@ -78,6 +85,13 @@ function MyPage() {
   const currentColor = neonColors[colorIndex];
 
   const handleSlotClick = (index) => {
+    // 삭제 모드일 때는 체크박스 토글
+    if (deleteMode) {
+      setSelectedForDelete((prev) =>
+        prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+      );
+      return;
+    }
     setSelectedSlot(index);
     fileInputRef.current.click();
   };
@@ -111,7 +125,6 @@ function MyPage() {
     setUploadingSlot(selectedSlot);
 
     try {
-      // Cloudinary에 첫 번째 파일만 업로드
       const formData = new FormData();
       formData.append("file", files[0]);
       formData.append("upload_preset", "phameme_upload");
@@ -121,7 +134,6 @@ function MyPage() {
       });
       const data = await res.json();
       if (!data.secure_url) throw new Error("Cloudinary 업로드 실패");
-      // 슬롯에 URL 문자열로 저장 - Firestore는 중첩 배열 미지원
       const uploadedURL = data.secure_url;
 
       const newCategories = categories.map((cat, ci) => {
@@ -160,6 +172,40 @@ function MyPage() {
     e.target.value = "";
     setUploadingSlot(null);
     setSelectedSlot(null);
+  };
+
+  // Delete 버튼 클릭 - 삭제 모드 진입 또는 선택된 슬롯 삭제 실행
+  const handleDeleteClick = async () => {
+    if (!deleteMode) {
+      // 첫 번째 클릭 - 삭제 모드 진입
+      setDeleteMode(true);
+      setSelectedForDelete([]);
+      return;
+    }
+    // 두 번째 클릭 - 선택된 슬롯 삭제 실행
+    if (selectedForDelete.length === 0) {
+      alert("삭제할 사진을 선택하세요.");
+      return;
+    }
+    const newCategories = categories.map((cat, ci) => {
+      if (ci !== currentCategoryIdx) return cat;
+      const newSlots = [...cat];
+      selectedForDelete.forEach((idx) => {
+        newSlots[idx] = null;
+      });
+      return newSlots;
+    });
+    setCategories(newCategories);
+
+    const currentCatId = categoryIds[currentCategoryIdx];
+    if (currentCatId) {
+      await updateDoc(doc(db, "categories", currentCatId), {
+        slots: newCategories[currentCategoryIdx],
+      });
+    }
+    // 삭제 모드 종료
+    setDeleteMode(false);
+    setSelectedForDelete([]);
   };
 
   const currentSlots = categories[currentCategoryIdx] || [null, null, null, null, null, null];
@@ -241,13 +287,26 @@ function MyPage() {
 
         <div className="flex items-center justify-between mb-4">
           <p style={{ color: currentColor }} className="text-sm">내 착샷</p>
-          <button
-            style={{ borderColor: currentColor, color: currentColor }}
-            className="border px-3 py-1 rounded-full text-sm"
-            onClick={handleAddClick}
-          >
-            + 사진 추가
-          </button>
+          <div className="flex gap-2">
+            <button
+              style={{ borderColor: currentColor, color: currentColor }}
+              className="border px-2 py-1 rounded-full text-xs w-16 text-center"
+              onClick={handleAddClick}
+            >
+              Upload
+            </button>
+            <button
+              style={{
+                borderColor: currentColor,
+                color: deleteMode ? "white" : currentColor,
+                backgroundColor: deleteMode ? currentColor : "white",
+              }}
+              className="border px-2 py-1 rounded-full text-xs w-16 text-center"
+              onClick={handleDeleteClick}
+            >
+              Delete
+            </button>
+          </div>
         </div>
 
         <input
@@ -263,13 +322,24 @@ function MyPage() {
             <div
               key={i}
               style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-              className="aspect-square bg-white border rounded-lg overflow-hidden flex items-center justify-center cursor-pointer"
+              className="aspect-square bg-white border rounded-lg overflow-hidden flex items-center justify-center cursor-pointer relative"
               onClick={() => handleSlotClick(i)}
             >
+              {/* 삭제 모드일 때 사진 있는 슬롯에만 체크박스 표시 */}
+              {deleteMode && slot && (
+                <div className="absolute top-1 left-1 z-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedForDelete.includes(i)}
+                    onChange={() => {}}
+                    style={{ accentColor: currentColor }}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </div>
+              )}
               {uploadingSlot === i ? (
                 <span style={{ color: currentColor }} className="text-xs">업로드 중...</span>
               ) : slot ? (
-                // 슬롯에 URL 문자열 저장이므로 slot 그대로 사용
                 <img src={slot} className="w-full h-full object-cover" />
               ) : i === 0 ? (
                 <span style={{ color: currentColor }} className="text-xs font-bold">Main +</span>

@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { collection, getDocs, query, getDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
+import { auth } from "../firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 function Home() {
   const neonColors = ["#7C3AED", "#EC4899", "#F97316", "#3B82F6", "#10B981"];
@@ -9,6 +11,14 @@ function Home() {
   const navigate = useNavigate();
   const [cards, setCards] = useState([]);
   const [activeIndex, setActiveIndex] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -66,29 +76,13 @@ function Home() {
         <button
           style={{ borderColor: currentColor, color: currentColor, transition: "border-color 1s ease, color 1s ease" }}
           className="border px-4 rounded-full transition"
-          onClick={() => navigate("/login")}
+          onClick={() => currentUser ? signOut(auth) : navigate("/login")}
         >
-          로그인
+          {currentUser ? "로그아웃" : "로그인"}
         </button>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 pb-32">
-        <div
-          style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-          className="border-2 rounded-xl p-4 mb-6 text-center shadow-md"
-        >
-          <p style={{ color: currentColor }} className="text-sm font-bold">
-            오늘의 착샷을 올려보세요
-          </p>
-          <button
-            onClick={() => navigate("/mypage")}
-            style={{ borderColor: currentColor, color: currentColor, transition: "border-color 1s ease, color 1s ease" }}
-            className="mt-2 border px-6 py-2 rounded-full text-sm font-bold transition"
-          >
-            업로드
-          </button>
-        </div>
-
         <div className="space-y-6">
           {cards.length === 0 ? (
             <p style={{ color: currentColor }} className="text-center text-sm">
@@ -123,7 +117,7 @@ function Home() {
 
                     <div
                       className="w-full overflow-hidden cursor-grab"
-                      style={{ aspectRatio: "4/5" }}
+                      style={{ aspectRatio: "4/5.8" }}
                       onTouchStart={(e) => {
                         e.currentTarget.dataset.startX = e.touches[0].clientX;
                       }}
@@ -187,7 +181,7 @@ function Home() {
                       className="absolute bottom-0 left-0 z-10 w-full px-4 py-3 flex justify-between items-center"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.4), transparent)" }}
                     >
-                      <span className="text-sm text-white drop-shadow">AI점수: -</span>
+                      <span className="text-sm text-white drop-shadow">Analyzed by Gemini: -</span>
                       <span className="text-xs text-white drop-shadow">조회수 -</span>
                     </div>
                   </div>
