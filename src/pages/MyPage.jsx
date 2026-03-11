@@ -18,9 +18,8 @@ function MyPage() {
   const fileInputRef = useRef(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [categoryIds, setCategoryIds] = useState([null]);
-  // 삭제 모드 상태 - true면 체크박스 표시
+  const [categoryDates, setCategoryDates] = useState([null]);
   const [deleteMode, setDeleteMode] = useState(false);
-  // 선택된 삭제 슬롯 인덱스 목록
   const [selectedForDelete, setSelectedForDelete] = useState([]);
 
   const handleLogout = async () => {
@@ -42,50 +41,56 @@ function MyPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (!user) {
-          navigate("/login");
-          return;
-        }
-        setCurrentUser(user);
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfilePhoto(docSnap.data().photoURL);
-        }
-        const q = query(
-          collection(db, "categories"),
-          where("userId", "==", user.uid)
-        );
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-          setCategories([[null, null, null, null, null, null]]);
-          setCategoryIds([null]);
-        } else {
-          const cardList = snapshot.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => a.createdAt?.toDate?.() - b.createdAt?.toDate?.());
-          const loadedCategories = cardList.map((cat) => {
-            const slots = [null, null, null, null, null, null];
-            if (cat.slots) {
-              cat.slots.forEach((slot, i) => {
-                if (i < 6) slots[i] = slot || null;
-              });
-            }
-            return slots;
-          });
-          setCategories(loadedCategories);
-          setCategoryIds(cardList.map((c) => c.id));
-          setCurrentCategoryIdx(loadedCategories.length - 1);
-        }
-       
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+      setCurrentUser(user);
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setProfilePhoto(docSnap.data().photoURL);
+      }
+      const q = query(
+        collection(db, "categories"),
+        where("userId", "==", user.uid)
+      );
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        setCategories([[null, null, null, null, null, null]]);
+        setCategoryIds([null]);
+        setCategoryDates([null]);
+      } else {
+        const cardList = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => a.createdAt?.toDate?.() - b.createdAt?.toDate?.());
+        const loadedCategories = cardList.map((cat) => {
+          const slots = [null, null, null, null, null, null];
+          if (cat.slots) {
+            cat.slots.forEach((slot, i) => {
+              if (i < 6) slots[i] = slot || null;
+            });
+          }
+          return slots;
+        });
+        setCategories(loadedCategories);
+        setCategoryIds(cardList.map((c) => c.id));
+        setCategoryDates(cardList.map((c) => c.createdAt?.toDate?.() || null));
+        setCurrentCategoryIdx(loadedCategories.length - 1);
+      }
     });
     return () => unsubscribe();
   }, []);
 
   const currentColor = neonColors[colorIndex];
 
+  const formatDate = (date) => {
+    if (!date) return "";
+    const d = new Date(date);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  };
+
   const handleSlotClick = (index) => {
-    // 삭제 모드일 때는 체크박스 토글
     if (deleteMode) {
       setSelectedForDelete((prev) =>
         prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
@@ -116,6 +121,7 @@ function MyPage() {
     }
     setCategories((prev) => [...prev, [null, null, null, null, null, null]]);
     setCategoryIds((prev) => [...prev, null]);
+    setCategoryDates((prev) => [...prev, new Date()]);
     setCurrentCategoryIdx(categories.length);
   };
 
@@ -152,15 +158,21 @@ function MyPage() {
           slots: slotsToSave,
         });
       } else {
+        const now = new Date();
         const catRef = await addDoc(collection(db, "categories"), {
           slots: slotsToSave,
           userId: currentUser.uid,
           userEmail: currentUser.email,
-          createdAt: new Date(),
+          createdAt: now,
         });
         setCategoryIds((prev) => {
           const updated = [...prev];
           updated[currentCategoryIdx] = catRef.id;
+          return updated;
+        });
+        setCategoryDates((prev) => {
+          const updated = [...prev];
+          updated[currentCategoryIdx] = now;
           return updated;
         });
       }
@@ -174,15 +186,12 @@ function MyPage() {
     setSelectedSlot(null);
   };
 
-  // Delete 버튼 클릭 - 삭제 모드 진입 또는 선택된 슬롯 삭제 실행
   const handleDeleteClick = async () => {
     if (!deleteMode) {
-      // 첫 번째 클릭 - 삭제 모드 진입
       setDeleteMode(true);
       setSelectedForDelete([]);
       return;
     }
-    // 두 번째 클릭 - 선택된 슬롯 삭제 실행
     if (selectedForDelete.length === 0) {
       setDeleteMode(false);
       return;
@@ -203,12 +212,9 @@ function MyPage() {
         slots: newCategories[currentCategoryIdx],
       });
     }
-    // 삭제 모드 종료
     setDeleteMode(false);
     setSelectedForDelete([]);
   };
-
-  const currentSlots = categories[currentCategoryIdx] || [null, null, null, null, null, null];
 
   return (
     <div className="min-h-screen bg-white text-black">
@@ -225,15 +231,15 @@ function MyPage() {
         <div className="flex gap-2">
           <button
             onClick={() => navigate("/editprofile")}
-            style={{ borderColor: currentColor, color: currentColor, transition: "border-color 1s ease" }}
-            className="border px-4 py-1 rounded-full transition"
+            className="border px-2 py-0.5 rounded-full text-xs transition"
+            style={{ borderColor: currentColor, color: currentColor, minWidth: "5rem", textAlign: "center" }}
           >
             회원정보 수정
           </button>
           <button
             onClick={handleLogout}
-            style={{ borderColor: currentColor, color: currentColor, transition: "border-color 1s ease" }}
-            className="border px-4 py-1 rounded-full transition"
+            className="border px-2 py-0.5 rounded-full text-xs transition"
+            style={{ borderColor: currentColor, color: currentColor, minWidth: "5rem", textAlign: "center" }}
           >
             로그아웃
           </button>
@@ -261,25 +267,11 @@ function MyPage() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-4 overflow-x-auto">
-          {categories.map((_, ci) => (
-            <button
-              key={ci}
-              onClick={() => setCurrentCategoryIdx(ci)}
-              style={{
-                borderColor: currentColor,
-                color: ci === currentCategoryIdx ? "white" : currentColor,
-                backgroundColor: ci === currentCategoryIdx ? currentColor : "white",
-              }}
-              className="border px-3 py-1 rounded-full text-xs flex-shrink-0 transition"
-            >
-              {ci + 1}번 카테고리
-            </button>
-          ))}
+        <div className="flex gap-2 mb-4">
           <button
             onClick={handleAddCategory}
             style={{ borderColor: currentColor, color: currentColor }}
-            className="border px-3 py-1 rounded-full text-xs flex-shrink-0"
+            className="border px-3 py-1 rounded-full text-xs"
           >
             + 새 카테고리
           </button>
@@ -317,35 +309,49 @@ function MyPage() {
           onChange={handleFileChange}
         />
 
-        <div className="grid grid-cols-3 gap-2">
-          {currentSlots.map((slot, i) => (
-            <div
-              key={i}
-              style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-              className="aspect-square bg-white border rounded-lg overflow-hidden flex items-center justify-center cursor-pointer relative"
-              onClick={() => handleSlotClick(i)}
-            >
-              {/* 삭제 모드일 때 사진 있는 슬롯에만 체크박스 표시 */}
-              {deleteMode && slot && (
-                <div className="absolute top-1 left-1 z-10">
-                  <input
-                    type="checkbox"
-                    checked={selectedForDelete.includes(i)}
-                    onChange={() => {}}
-                    style={{ accentColor: currentColor }}
-                    className="w-4 h-4 cursor-pointer"
-                  />
-                </div>
-              )}
-              {uploadingSlot === i ? (
-                <span style={{ color: currentColor }} className="text-xs">업로드 중...</span>
-              ) : slot ? (
-                <img src={slot} className="w-full h-full object-cover" />
-              ) : i === 0 ? (
-                <span style={{ color: currentColor }} className="text-xs font-bold">Main +</span>
-              ) : (
-                <span style={{ color: currentColor }} className="text-xs">+</span>
-              )}
+        <div className="space-y-8">
+          {categories.map((slots, ci) => (
+            <div key={ci}>
+              <div className="flex items-center gap-2 mb-3">
+                <span style={{ color: currentColor }} className="text-sm font-bold whitespace-nowrap">
+                  {formatDate(categoryDates[ci]) || "날짜 없음"}
+                </span>
+                <div style={{ backgroundColor: currentColor, height: "2px" }} className="flex-1 opacity-50" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {slots.map((slot, i) => (
+                  <div
+                    key={i}
+                    style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
+                    className="aspect-square bg-white border rounded-lg overflow-hidden flex items-center justify-center cursor-pointer relative"
+                    onClick={() => {
+                      setCurrentCategoryIdx(ci);
+                      handleSlotClick(i);
+                    }}
+                  >
+                    {deleteMode && slot && (
+                      <div className="absolute top-1 left-1 z-10">
+                        <input
+                          type="checkbox"
+                          checked={ci === currentCategoryIdx && selectedForDelete.includes(i)}
+                          onChange={() => {}}
+                          style={{ accentColor: currentColor }}
+                          className="w-4 h-4 cursor-pointer"
+                        />
+                      </div>
+                    )}
+                    {uploadingSlot === i && ci === currentCategoryIdx ? (
+                      <span style={{ color: currentColor }} className="text-xs">업로드 중...</span>
+                    ) : slot ? (
+                      <img src={slot} className="w-full h-full object-cover" />
+                    ) : i === 0 && ci === 0 ? (
+                      <span style={{ color: currentColor }} className="text-xs font-bold">Main +</span>
+                    ) : (
+                      <span style={{ color: currentColor }} className="text-xs">+</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
