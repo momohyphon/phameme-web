@@ -14,13 +14,13 @@ function EditProfile() {
   const navigate = useNavigate();
   // 현재 로그인한 유저
   const [currentUser, setCurrentUser] = useState(null);
-  // 별명 입력값 - Firestore name 필드와 연동, 화면 표시만 별명으로 변경
+  // 별명 입력값 - Firestore name 필드와 연동
   const [name, setName] = useState("");
   // 성별 입력값
   const [gender, setGender] = useState("");
   // 프로필 사진 URL - 상단 프로필 표시용
   const [profilePhoto, setProfilePhoto] = useState("");
-  // 현재 비밀번호 - 비밀번호 변경시 재인증용
+  // 현재 비밀번호 - 재인증용
   const [currentPassword, setCurrentPassword] = useState("");
   // 새 비밀번호
   const [newPassword, setNewPassword] = useState("");
@@ -30,7 +30,7 @@ function EditProfile() {
   const [success, setSuccess] = useState("");
   // 오류 메시지
   const [error, setError] = useState("");
-  // 회원탈퇴 섹션 표시 여부 - 토글 방식
+  // 회원탈퇴 섹션 표시 여부
   const [showDeleteTab, setShowDeleteTab] = useState(false);
   // 회원탈퇴 확인용 비밀번호
   const [deletePassword, setDeletePassword] = useState("");
@@ -51,10 +51,8 @@ function EditProfile() {
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          // Firestore name 필드 불러오기
           setName(docSnap.data().name || "");
           setGender(docSnap.data().gender || "");
-          // 상단 프로필 사진 표시용
           setProfilePhoto(docSnap.data().photoURL || "");
         }
       }
@@ -64,7 +62,7 @@ function EditProfile() {
 
   const currentColor = neonColors[colorIndex];
 
-  // 저장 처리 - 별명(name) + 비밀번호 변경
+  // 저장 처리 - 별명 + 비밀번호 변경
   const handleSave = async () => {
     if (newPassword || newPasswordConfirm) {
       if (newPassword !== newPasswordConfirm) {
@@ -80,7 +78,6 @@ function EditProfile() {
         return;
       }
     }
-
     try {
       // Firestore name 필드 업데이트 - merge: true로 기존 데이터 유지
       await setDoc(doc(db, "users", currentUser.uid), {
@@ -88,7 +85,7 @@ function EditProfile() {
         gender: gender,
       }, { merge: true });
 
-      // 비밀번호 변경 요청시 - Firebase 재인증 후 변경
+      // 비밀번호 변경 요청시 재인증 후 변경
       if (newPassword) {
         const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
         await reauthenticateWithCredential(currentUser, credential);
@@ -96,9 +93,7 @@ function EditProfile() {
       }
 
       setSuccess("저장되었습니다!");
-      setTimeout(() => {
-        navigate("/mypage");
-      }, 2000);
+      setTimeout(() => { navigate("/mypage"); }, 2000);
     } catch (err) {
       if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
         setError("현재 비밀번호가 틀렸습니다.");
@@ -108,14 +103,13 @@ function EditProfile() {
     }
   };
 
-  // 회원탈퇴 처리 - 재인증 후 Firestore 데이터 + Auth 계정 삭제
+  // 회원탈퇴 처리 - 재인증 후 Firestore + Auth 계정 삭제
   const handleDeleteAccount = async () => {
     if (!deletePassword) {
       setError("비밀번호를 입력해 주세요.");
       return;
     }
     try {
-      // Firebase 계정 삭제 전 재인증 필수
       const credential = EmailAuthProvider.credential(currentUser.email, deletePassword);
       await reauthenticateWithCredential(currentUser, credential);
 
@@ -124,9 +118,7 @@ function EditProfile() {
 
       // 내 카테고리 전부 삭제
       const catSnap = await getDocs(query(collection(db, "categories"), where("userId", "==", currentUser.uid)));
-      for (const d of catSnap.docs) {
-        await deleteDoc(doc(db, "categories", d.id));
-      }
+      for (const d of catSnap.docs) await deleteDoc(doc(db, "categories", d.id));
 
       // 내 팔로우 데이터 전부 삭제
       const followSnap = await getDocs(collection(db, "follows"));
@@ -151,21 +143,18 @@ function EditProfile() {
   };
 
   return (
-    // 수정됨: flex items-center justify-center로 로그인 페이지처럼 화면 중앙 배치
-    <div className="min-h-screen bg-white flex items-center justify-center py-10">
-      <div className="w-full max-w-sm px-6">
-
-        {/* 카드 컨테이너 - 로그인 페이지와 동일한 스타일 */}
+    // 수정됨: 상하폭 축소 + 스크롤 가능하게 - 모바일에서 BottomNav에 안 가리게
+    <div className="bg-white flex items-center justify-center py-4 overflow-y-auto" style={{ minHeight: "100dvh" }}>
+      <div className="w-full max-w-sm px-6 py-4">
         <div
           style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-          className="border rounded-2xl p-8 shadow-lg"
+          className="border rounded-2xl p-6 shadow-lg"
         >
-          {/* 상단 프로필 - 사진 + 아이디 표시 */}
-          <div className="flex items-center gap-4 mb-8">
-            {/* 프로필 사진 원형 */}
+          {/* 상단 프로필 - 사진 + 아이디 */}
+          <div className="flex items-center gap-4 mb-6">
             <div
               style={{ borderColor: currentColor }}
-              className="w-16 h-16 rounded-full border-2 overflow-hidden flex items-center justify-center flex-shrink-0"
+              className="w-14 h-14 rounded-full border-2 overflow-hidden flex items-center justify-center flex-shrink-0"
             >
               {profilePhoto ? (
                 <img src={profilePhoto} className="w-full h-full object-cover" />
@@ -181,27 +170,27 @@ function EditProfile() {
 
           {/* 성공 메시지 */}
           {success && (
-            <p style={{ color: currentColor }} className="text-center font-bold mb-4">{success}</p>
+            <p style={{ color: currentColor }} className="text-center font-bold mb-3">{success}</p>
           )}
 
           {/* 오류 메시지 */}
           {error && (
-            <p className="text-red-400 text-sm text-center mb-4">{error}</p>
+            <p className="text-red-400 text-sm text-center mb-3">{error}</p>
           )}
 
-          {/* 별명 입력 - Firestore name 필드와 연동 */}
-          <p style={{ color: currentColor }} className="text-xs font-bold mb-2 px-1">별명</p>
+          {/* 별명 입력 - Firestore name 필드 연동 */}
+          <p style={{ color: currentColor }} className="text-xs font-bold mb-1 px-1">별명</p>
           <input
             type="text"
             placeholder="별명"
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={{ borderColor: currentColor }}
-            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-6 outline-none"
+            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-4 outline-none"
           />
 
           {/* 비밀번호 변경 섹션 */}
-          <p style={{ color: currentColor }} className="text-xs font-bold mb-2 px-1">비밀번호 변경</p>
+          <p style={{ color: currentColor }} className="text-xs font-bold mb-1 px-1">비밀번호 변경</p>
           {/* 현재 비밀번호 - 재인증용 */}
           <input
             type="password"
@@ -209,7 +198,7 @@ function EditProfile() {
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             style={{ borderColor: currentColor }}
-            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-3 outline-none"
+            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-2 outline-none"
           />
           {/* 새 비밀번호 */}
           <input
@@ -218,7 +207,7 @@ function EditProfile() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             style={{ borderColor: currentColor }}
-            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-3 outline-none"
+            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-2 outline-none"
           />
           {/* 새 비밀번호 확인 */}
           <input
@@ -227,14 +216,14 @@ function EditProfile() {
             value={newPasswordConfirm}
             onChange={(e) => setNewPasswordConfirm(e.target.value)}
             style={{ borderColor: currentColor }}
-            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-6 outline-none"
+            className="w-full bg-white border text-black px-4 py-2 rounded-full mb-4 outline-none"
           />
 
           {/* 저장 버튼 */}
           <button
             onClick={handleSave}
             style={{ backgroundColor: currentColor }}
-            className="w-full text-white py-2 rounded-full mb-3"
+            className="w-full text-white py-2 rounded-full mb-2"
           >
             저장
           </button>
@@ -243,7 +232,7 @@ function EditProfile() {
           <button
             onClick={() => navigate("/mypage")}
             style={{ borderColor: currentColor, color: currentColor }}
-            className="w-full border py-2 rounded-full mb-6"
+            className="w-full border py-2 rounded-full mb-4"
           >
             취소
           </button>
@@ -258,9 +247,9 @@ function EditProfile() {
 
           {/* 회원탈퇴 섹션 - 토글시 표시 */}
           {showDeleteTab && (
-            <div className="border-t pt-4 mt-2" style={{ borderColor: currentColor }}>
+            <div className="border-t pt-3 mt-1" style={{ borderColor: currentColor }}>
               {/* 안내 문구 */}
-              <p className="text-xs text-gray-500 text-center mb-4">
+              <p className="text-xs text-gray-500 text-center mb-3">
                 회원탈퇴시 기존 정보는 모두 삭제되오니 확인하시고 탈퇴 진행바랍니다.
               </p>
               {/* 탈퇴 확인용 비밀번호 */}
@@ -270,7 +259,7 @@ function EditProfile() {
                 value={deletePassword}
                 onChange={(e) => setDeletePassword(e.target.value)}
                 style={{ borderColor: currentColor }}
-                className="w-full bg-white border text-black px-4 py-2 rounded-full mb-3 outline-none text-sm"
+                className="w-full bg-white border text-black px-4 py-2 rounded-full mb-2 outline-none text-sm"
               />
               {/* 탈퇴 실행 버튼 */}
               <button
