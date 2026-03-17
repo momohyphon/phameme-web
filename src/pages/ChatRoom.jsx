@@ -220,7 +220,7 @@ function ChatRoom() {
       {/* 메시지 입력창 - 하단 고정 */}
       <div
         style={{ borderColor: currentColor }}
-        className="fixed bottom-16 left-0 right-0 border-t bg-white px-4 py-2 flex gap-2"
+        className="fixed bottom-60 left-0 right-0 border-t bg-white px-4 py-2 flex gap-2"
       >
         <input
           type="text"
