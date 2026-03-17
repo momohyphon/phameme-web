@@ -101,7 +101,7 @@ function MyPage() {
         // 생성일 오름차순 정렬
         const cardList = snapshot.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => a.createdAt?.toDate?.() - b.createdAt?.toDate?.());
+          .sort((a, b) => b.createdAt?.toDate?.() - a.createdAt?.toDate?.());
 
         // 각 카테고리의 slots 배열 6칸으로 정규화
         const loadedCategories = cardList.map((cat) => {
@@ -118,7 +118,7 @@ function MyPage() {
         setCategoryIds(cardList.map((c) => c.id));
         setCategoryDates(cardList.map((c) => c.createdAt?.toDate?.() || null));
         // 마지막 카테고리를 현재 카테고리로 설정
-        setCurrentCategoryIdx(loadedCategories.length - 1);
+        setCurrentCategoryIdx(0);
         // 게시물수 - 카테고리 개수로 집계
         setPostCount(snapshot.docs.length);
 
@@ -203,16 +203,16 @@ function MyPage() {
 
   // 새 카테고리 추가 - 현재 카테고리에 사진이 있어야 추가 가능
   const handleAddCategory = () => {
-    const lastCategory = categories[categories.length - 1];
-    const isEmpty = lastCategory.every((slot) => slot === null);
+    // const lastCategory = categories[categories.length - 1];
+    const isEmpty = categories[0].every((slot) => slot === null);
     if (isEmpty) {
       alert("현재 카테고리에 사진을 먼저 추가하세요.");
       return;
     }
-    setCategories((prev) => [...prev, [null, null, null, null, null, null]]);
-    setCategoryIds((prev) => [...prev, null]);
-    setCategoryDates((prev) => [...prev, new Date()]);
-    setCurrentCategoryIdx(categories.length);
+    setCategories((prev) => [[null, null, null, null, null, null], ...prev]);
+    setCategoryIds((prev) => [null, ...prev]);
+    setCategoryDates((prev) => [new Date(), ...prev]);
+    setCurrentCategoryIdx(0);
   };
 
   // 파일 선택 후 Cloudinary 업로드 + Firestore 저장
