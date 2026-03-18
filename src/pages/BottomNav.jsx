@@ -38,7 +38,7 @@ function BottomNav() {
       // chats 컬렉션에서 내가 참여한 채팅방 실시간 구독
       const q = query(
         collection(db, "chats"),
-        where("participants", "array-contains", user.uid)
+        where("participants", "array-contains", user.uid),
       );
 
       const unsubscribeChats = onSnapshot(q, (snapshot) => {
@@ -60,52 +60,76 @@ function BottomNav() {
   }, []);
 
   const currentColor = neonColors[colorIndex];
+  if (location.pathname.startsWith('/chatroom')) return null;
 
   return (
     <>
-      {/* 탭 카드 - z-50으로 사진 위에 표시 */}
-      <div className="fixed left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-50" style={{ bottom: "3rem" }}>
+      <div style={{ backgroundColor: "white" }}>
+        {/* 탭 카드 - z-50으로 사진 위에 표시 */}
         <div
-          style={{
-            transform: float ? "translateY(-3px)" : "translateY(0px)",
-            transition: "transform 0.8s ease-in-out",
-            borderColor: currentColor,
-          }}
-          className="flex justify-around items-center bg-white border-2 rounded-2xl px-4 py-2 shadow-2xl"
+          className="fixed left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-50"
+          style={{ bottom: "2rem", backgroundColor: "white" }}
         >
-          <button onClick={() => navigate("/")} style={{ color: currentColor }} className="flex-1 text-center">
-            <span className="text-xs">Home</span>
-          </button>
+          <div
+            style={{
+              transform: float ? "translateY(-3px)" : "translateY(0px)",
+              transition: "transform 0.8s ease-in-out",
+              borderColor: currentColor,
+            }}
+            className="flex justify-around items-center bg-white border-2 rounded-2xl px-4 py-2 shadow-2xl"
+          >
+            <button
+              onClick={() => navigate("/")}
+              style={{ color: currentColor }}
+              className="flex-1 text-center"
+            >
+              <span className="text-xs">Home</span>
+            </button>
 
-          {/* [수정] Alerts 버튼 - ChatList로 연결 + 읽지 않은 메시지 수 표시 */}
-          <button onClick={() => navigate("/chatlist")} style={{ color: currentColor }} className="flex-1 text-center relative">
-            <span className="text-xs">Alerts</span>
-            {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
-            {unreadCount > 0 && (
-              <span
-                style={{ backgroundColor: currentColor, color: "white" }}
-                className="absolute -top-2 -right-1 text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center"
-              >
-                {unreadCount}
-              </span>
-            )}
-          </button>
+            {/* [수정] Alerts 버튼 - ChatList로 연결 + 읽지 않은 메시지 수 표시 */}
+            <button
+              onClick={() => navigate("/chatlist")}
+              style={{ color: currentColor }}
+              className="flex-1 text-center relative"
+            >
+              <span className="text-xs">Alerts</span>
+              {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
+              {unreadCount > 0 && (
+                <span
+                  style={{ backgroundColor: currentColor, color: "white" }}
+                  className="absolute -top-2 -right-1 text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                >
+                  {unreadCount}
+                </span>
+              )}
+            </button>
 
-          <button onClick={() => navigate("/mypage")} style={{ color: currentColor }} className="flex-1 text-center">
-            <span className="text-xs">Upload</span>
-          </button>
-          <button onClick={() => navigate("/mypage")} style={{ color: currentColor }} className="flex-1 text-center">
-            <span className="text-xs">Member</span>
-          </button>
+            <button
+              onClick={() => navigate("/mypage")}
+              style={{ color: currentColor }}
+              className="flex-1 text-center"
+            >
+              <span className="text-xs">Upload</span>
+            </button>
+            <button
+              onClick={() => navigate("/mypage")}
+              style={{ color: currentColor }}
+              className="flex-1 text-center"
+            >
+              <span className="text-xs">Member</span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* 하단 구분선 */}
-      <div
-        className="fixed left-1/2 -translate-x-1/2 w-full max-w-lg px-4 text-center"
-        style={{ bottom: "0", borderTop: `1px solid ${currentColor}`, paddingTop: "0.5rem", paddingBottom: "0.5rem", backgroundColor: "white" }}
-      >
-        <p className="text-black text-xs">@ 2025 Phameme Corp. All rights reserved</p>
+        {/* 하단 구분선 */}
+        <div
+          className="fixed left-1/2 -translate-x-1/2 w-full max-w-lg text-center px-4 z-50"
+          style={{ bottom: "0", backgroundColor: "white", paddingTop: "0.5rem", paddingBottom: "0.5rem", borderTop: `1px solid ${currentColor}` }}
+        >
+          <p className="text-black text-xs">
+            @ 2025 Phameme Corp. All rights reserved
+          </p>
+        </div>
       </div>
     </>
   );
