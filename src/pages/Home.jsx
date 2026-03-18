@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, getDoc, doc, setDoc, deleteDoc, addDoc, serverTimestamp, where } from "firebase/firestore";
+import { collection, getDocs, query, getDoc, doc, setDoc, deleteDoc, addDoc, serverTimestamp, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { auth } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -13,6 +13,8 @@ function Home() {
   const [activeIndex, setActiveIndex] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [followMap, setFollowMap] = useState({});
+  // 읽지 않은 메시지가 있는 상대방 uid 목록
+  const [unreadUids, setUnreadUids] = useState([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -27,6 +29,22 @@ function Home() {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  // 실시간 unreadUids 업데이트
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUser.uid)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const uids = snapshot.docs
+        .filter((d) => d.data().unreadBy && d.data().unreadBy.includes(currentUser.uid))
+        .map((d) => d.data().participants.find((uid) => uid !== currentUser.uid));
+      setUnreadUids(uids);
+    });
+    return () => unsub();
+  }, [currentUser]);
 
   const handleFollow = async (targetUserId) => {
     if (!currentUser) { navigate("/login"); return; }
@@ -46,7 +64,6 @@ function Home() {
   };
 
   // 채팅방 이동 함수 - DM 버튼 클릭시 실행
-  // 기존 채팅방 있으면 이동, 없으면 new 경로로 이동하여 메시지 전송시 생성
   const handleChat = async (targetUserId) => {
     if (!currentUser) { navigate("/login"); return; }
     const chatsSnap = await getDocs(
@@ -65,7 +82,7 @@ function Home() {
     }
   };
 
-  // 날짜 포맷 함수 - createdAt을 YYYY.MM.DD 형식으로 변환
+  // 날짜 포맷 함수
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -148,6 +165,13 @@ function Home() {
           ) : (
             cards.map((card) => {
               const currentIdx = activeIndex[card.id] ?? 0;
+              // [수정] DM 버튼 배경색 여부 결정
+              // 본인 게시물 - unreadUids에 뭔가 있으면 배경색
+              // 상대방 게시물 - 해당 상대방 uid가 unreadUids에 있으면 배경색
+              const hasDmAlert = currentUser?.uid === card.userId
+                ? unreadUids.length > 0
+                : unreadUids.includes(card.userId);
+
               return (
                 <div
                   key={card.id}
@@ -157,7 +181,6 @@ function Home() {
                     className="flex items-center justify-between px-4 py-2"
                     style={{ backgroundColor: "white" }}
                   >
-                    {/* 왼쪽 - 프로필사진 + 아이디 + 팔로우 + DM */}
                     <div className="flex items-center gap-2">
                       {/* 프로필사진 */}
                       <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
@@ -169,8 +192,7 @@ function Home() {
                       <span style={{ color: currentColor }} className="text-sm font-semibold">
                         @{card.userEmail?.split("@")[0]}
                       </span>
-                      {/* [수정] 팔로우버튼 - DM버튼과 동일한 크기/스타일
-                           내 게시물에는 표시 안함 */}
+                      {/* 팔로우버튼 - 내 게시물에는 표시 안함 */}
                       {currentUser?.uid !== card.userId && (
                         <button
                           onClick={() => handleFollow(card.userId)}
@@ -178,7 +200,6 @@ function Home() {
                             borderColor: currentColor,
                             color: followMap[card.userId] ? "white" : currentColor,
                             backgroundColor: followMap[card.userId] ? currentColor : "transparent",
-                            // [수정] DM버튼과 동일한 크기
                             minWidth: "3.5rem",
                             textAlign: "center",
                           }}
@@ -187,21 +208,18 @@ function Home() {
                           {followMap[card.userId] ? "팔로잉" : "팔로우"}
                         </button>
                       )}
-                      {/* [수정] DM 버튼 - 팔로우버튼과 동일한 크기/스타일 */}
+                      {/* [수정] DM 버튼 - hasDmAlert 있으면 배경색, 없으면 외곽선만 */}
                       <button
                         onClick={() =>
                           currentUser?.uid === card.userId
                             ? navigate("/chatlist")
                             : handleChat(card.userId)
                         }
-                        style={{
-                          backgroundColor: currentColor,
-                          color: "white",
-                          borderColor: currentColor,
-                          // [수정] 팔로우버튼과 동일한 크기
-                          minWidth: "3.5rem",
-                          textAlign: "center",
-                        }}
+                        style={
+                          hasDmAlert
+                            ? { backgroundColor: currentColor, color: "white", borderColor: currentColor, minWidth: "3.5rem", textAlign: "center" }
+                            : { backgroundColor: "transparent", color: currentColor, borderColor: currentColor, minWidth: "3.5rem", textAlign: "center" }
+                        }
                         className="border px-2 py-0.5 rounded-full text-xs transition"
                       >
                         DM
@@ -215,7 +233,6 @@ function Home() {
                   </div>
 
                   <div className="relative">
-                    {/* 사진 영역 - 스와이프로 사진 전환 */}
                     <div
                       className="w-full overflow-hidden cursor-grab"
                       style={{ aspectRatio: "4/5.8" }}
@@ -259,7 +276,6 @@ function Home() {
                       />
                     </div>
 
-                    {/* 사진이 2장 이상일 때 오른쪽 썸네일 표시 */}
                     {card.photos.length > 1 && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
                         {card.photos.map((url, idx) => (
@@ -279,7 +295,6 @@ function Home() {
                       </div>
                     )}
 
-                    {/* [수정] 하단 오버레이 - AI/조회수 색상 네온 컬러로 변경 */}
                     <div
                       className="absolute bottom-0 left-0 z-10 w-full px-4 py-3 flex justify-between items-center"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.4), transparent)" }}

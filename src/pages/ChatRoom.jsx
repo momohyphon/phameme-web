@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   getDoc,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 
 function ChatRoom() {
@@ -78,6 +79,9 @@ function ChatRoom() {
       if (!chatDoc.exists()) return;
 
       setActualChatId(chatId);
+      await updateDoc(doc(db, "chats", chatId), {
+        unreadBy: arrayRemove(user.uid),
+      })
 
       const participants = chatDoc.data().participants;
       // [수정] 상대방 uid 저장

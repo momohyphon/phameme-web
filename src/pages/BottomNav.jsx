@@ -60,7 +60,7 @@ function BottomNav() {
   }, []);
 
   const currentColor = neonColors[colorIndex];
-  if (location.pathname.startsWith('/chatroom')) return null;
+  if (location.pathname.startsWith("/chatroom")) return null;
 
   return (
     <>
@@ -92,16 +92,18 @@ function BottomNav() {
               style={{ color: currentColor }}
               className="flex-1 text-center relative"
             >
-              <span className="text-xs">Alerts</span>
-              {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
-              {unreadCount > 0 && (
-                <span
-                  style={{ backgroundColor: currentColor, color: "white" }}
-                  className="absolute -top-2 -right-1 text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center"
-                >
-                  {unreadCount}
-                </span>
-              )}
+              <span className="relative inline-block">
+                <span className="text-xs">Alerts</span>
+                {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
+                {unreadCount > 0 && (
+                  <span
+                    style={{ backgroundColor: currentColor, color: "white" }}
+                    className="absolute -top-2 -right-0 text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </span>
             </button>
 
             <button
@@ -124,7 +126,13 @@ function BottomNav() {
         {/* 하단 구분선 */}
         <div
           className="fixed left-1/2 -translate-x-1/2 w-full max-w-lg text-center px-4 z-50"
-          style={{ bottom: "0", backgroundColor: "white", paddingTop: "0.5rem", paddingBottom: "0.5rem", borderTop: `1px solid ${currentColor}` }}
+          style={{
+            bottom: "0",
+            backgroundColor: "white",
+            paddingTop: "0.5rem",
+            paddingBottom: "0.5rem",
+            borderTop: `1px solid ${currentColor}`,
+          }}
         >
           <p className="text-black text-xs">
             @ 2025 Phameme Corp. All rights reserved
