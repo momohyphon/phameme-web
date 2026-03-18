@@ -186,7 +186,9 @@ function ChatRoom() {
   };
 
   return (
-    <div className="bg-white text-black flex flex-col" style={{ height: "100dvh" }}>
+    // [수정] height: 100dvh → position: fixed + inset-0 으로 변경
+    // 모바일 브라우저 주소창 움직임에 관계없이 헤더/입력창 완전 고정
+    <div className="bg-white text-black flex flex-col fixed inset-0">
       {/* 헤더 - 스크롤해도 상단 고정 */}
       <header
         style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
@@ -215,14 +217,13 @@ function ChatRoom() {
         <p style={{ color: currentColor }} className="text-sm font-bold flex-1">
           @{otherUser?.email?.split("@")[0]}
         </p>
-        {/* 나가기 버튼 - leftBy 필드에 내 uid 추가
-             participants 건드리지 않아서 데이터 보존 */}
+        {/* 나가기 버튼 - deleteDoc으로 채팅방 문서 삭제 */}
         <button
           onClick={async () => {
             if (!currentUser || !actualChatId) return;
             const confirmed = window.confirm("나가기 버튼을 누르면 대화목록에서 삭제됩니다. 나가시겠습니까?");
             if (!confirmed) return;
-            await deleteDoc(doc(db, "chats", actualChatId))
+            await deleteDoc(doc(db, "chats", actualChatId));
             navigate("/chatlist");
           }}
           style={{ color: currentColor }}
