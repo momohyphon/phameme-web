@@ -39,7 +39,7 @@ function Login() {
   const handleLogin = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/mypage");
+      navigate("/");
     } catch (err) {
       setError("이메일 또는 비밀번호가 틀렸습니다.");
     }

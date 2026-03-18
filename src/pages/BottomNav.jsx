@@ -93,7 +93,7 @@ function BottomNav() {
               className="flex-1 text-center relative"
             >
               <span className="relative inline-block">
-                <span className="text-xs">Alerts</span>
+                <span className="text-xs">SNS</span>
                 {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
                 {unreadCount > 0 && (
                   <span

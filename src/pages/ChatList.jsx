@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -9,17 +9,29 @@ import {
   onSnapshot,
   doc,
   getDoc,
-  getDocs,
 } from "firebase/firestore";
 
 function ChatList() {
+  // 네온 색상 배열 - 2초마다 순환하며 UI 색상 변경
   const neonColors = ["#7C3AED", "#EC4899", "#F97316", "#3B82F6", "#10B981"];
+
+  // 현재 네온 색상 인덱스 상태값
   const [colorIndex, setColorIndex] = useState(0);
+
+  // 현재 로그인한 유저 정보 상태값
   const [currentUser, setCurrentUser] = useState(null);
-  // 채팅방 목록 - chatId, 상대방 정보, 마지막 메시지, 읽지 않은 메시지 수 포함
+
+  // 채팅방 목록 상태값 - chatId, 상대방 정보, 마지막 메시지, 읽지 않음 여부 포함
   const [chatRooms, setChatRooms] = useState([]);
+
   const navigate = useNavigate();
 
+  // onSnapshot unsub를 useEffect 외부에서 관리하기 위한 ref
+  // onAuthStateChanged 콜백 내부에서 return () => unsub() 하면
+  // React useEffect 클린업으로 등록되지 않아 리스너가 중복 등록되는 버그 방지
+  const roomsUnsubRef = useRef(null);
+
+  // 네온 색상 2초마다 순환
   useEffect(() => {
     const interval = setInterval(() => {
       setColorIndex((prev) => (prev + 1) % neonColors.length);
@@ -27,41 +39,54 @@ function ChatList() {
     return () => clearInterval(interval);
   }, []);
 
+  // 현재 적용할 네온 색상
   const currentColor = neonColors[colorIndex];
 
+  // 로그인 상태 감지 + 내 채팅방 목록 실시간 구독
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      // 비로그인 상태면 로그인 페이지로 이동
       if (!user) {
         navigate("/login");
         return;
       }
       setCurrentUser(user);
 
-      // 내가 참여한 채팅방 실시간 구독
+      // 이전 onSnapshot 구독이 남아있으면 먼저 해제
+      if (roomsUnsubRef.current) {
+        roomsUnsubRef.current();
+        roomsUnsubRef.current = null;
+      }
+
+      // chats 컬렉션에서 내가 참여한 채팅방 실시간 구독
       const q = query(
         collection(db, "chats"),
         where("participants", "array-contains", user.uid)
       );
 
-      const unsub = onSnapshot(q, async (snapshot) => {
+      // unsub를 ref에 저장하여 useEffect 클린업에서 정상 해제 가능하게 함
+      roomsUnsubRef.current = onSnapshot(q, async (snapshot) => {
         const rooms = await Promise.all(
           snapshot.docs.map(async (d) => {
             const data = d.data();
+
+            // participants 배열에서 내 uid를 제외한 상대방 uid 추출
             const otherUid = data.participants.find((uid) => uid !== user.uid);
+
+            // otherUid가 없으면 해당 채팅방 스킵 - undefined 방어 처리
+            if (!otherUid) return null;
+
+            // 상대방 유저 정보 Firestore에서 불러오기
             const otherDoc = await getDoc(doc(db, "users", otherUid));
             const otherData = otherDoc.exists() ? otherDoc.data() : {};
 
-            // [수정] 읽지 않은 메시지 수 - messages 서브컬렉션에서 카운트
-            // senderId가 상대방이고 readBy 배열에 내 uid 없는 메시지 수
-            const messagesSnap = await getDocs(
-              collection(db, "chats", d.id, "messages")
-            );
-            const unreadCount = messagesSnap.docs.filter((m) => {
-              const mdata = m.data();
-              // 상대방이 보낸 메시지 중 내가 읽지 않은 것
-              return mdata.senderId !== user.uid &&
-                (!mdata.readBy || !mdata.readBy.includes(user.uid));
-            }).length;
+            // unreadBy 배열에 내 uid가 포함되어 있으면 읽지 않은 메시지 있음으로 판단
+            // Array.isArray()로 먼저 배열 여부 확인 - 기존 문서에 필드가 없거나
+            // 잘못된 타입으로 저장된 경우 .includes() 호출 시 TypeError 방지
+            const unreadCount =
+              Array.isArray(data.unreadBy) && data.unreadBy.includes(user.uid)
+                ? 1
+                : 0;
 
             return {
               chatId: d.id,
@@ -70,14 +95,17 @@ function ChatList() {
               otherPhoto: otherData.photoURL || null,
               lastMessage: data.lastMessage || "",
               lastMessageAt: data.lastMessageAt || null,
-              // [수정] 읽지 않은 메시지 수
+              // 읽지 않은 메시지 존재 여부 - 1이면 뱃지 표시
               unreadCount,
             };
           })
         );
 
-        // [수정] 실제 메시지가 있는 채팅방만 표시
-        const filteredRooms = rooms.filter((r) => r.lastMessage !== "");
+        // null 제거 - otherUid가 없는 채팅방 제외
+        const validRooms = rooms.filter((r) => r !== null);
+
+        // 실제 메시지가 있는 채팅방만 표시
+        const filteredRooms = validRooms.filter((r) => r.lastMessage !== "");
 
         // 마지막 메시지 시간 기준 최신순 정렬
         filteredRooms.sort((a, b) => {
@@ -88,10 +116,16 @@ function ChatList() {
 
         setChatRooms(filteredRooms);
       });
-
-      return () => unsub();
     });
-    return () => unsubscribe();
+
+    // useEffect 클린업: onAuthStateChanged 해제 + onSnapshot 해제
+    return () => {
+      unsubscribe();
+      if (roomsUnsubRef.current) {
+        roomsUnsubRef.current();
+        roomsUnsubRef.current = null;
+      }
+    };
   }, []);
 
   // 날짜 포맷 함수 - 오늘이면 시간만, 아니면 날짜만 표시
@@ -99,13 +133,16 @@ function ChatList() {
     if (!timestamp) return "";
     const date = timestamp.toDate();
     const now = new Date();
+    // 오늘 날짜와 같으면 시간만 표시
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
     if (isToday) {
+      // HH:MM 형식
       return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
     }
+    // 오늘이 아니면 MM.DD 형식
     return `${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
   };
 
@@ -113,24 +150,29 @@ function ChatList() {
     <div className="min-h-screen bg-white text-black">
       <header
         style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
-        className="border-b px-4 py-3 flex justify-between items-center"
+        className="border-b px-4 py-3 flex items-center gap-3"
       >
-        <h1
-          style={{ color: currentColor, transition: "color 1s ease" }}
-          className="text-2xl font-bold tracking-widest"
+        {/* 뒤로가기 버튼 - 홈으로 이동 */}
+        <button
+          onClick={() => navigate("/")}
+          style={{ color: currentColor }}
+          className="text-sm font-bold"
         >
-          Messages
-        </h1>
+          ←
+        </button>
+        <p style={{ color: currentColor }} className="text-sm font-bold">Home</p>
       </header>
 
       <div className="w-full max-w-2xl mx-auto px-4 py-4 pb-32">
         {chatRooms.length === 0 ? (
+          // 채팅방 없을 때 안내 문구
           <p style={{ color: currentColor }} className="text-center text-sm mt-10">
             아직 대화가 없습니다.
           </p>
         ) : (
           <div className="space-y-2">
             {chatRooms.map((room) => (
+              // 채팅방 항목 클릭시 해당 채팅방으로 이동
               <div
                 key={room.chatId}
                 onClick={() => navigate(`/chatroom/${room.chatId}`)}
@@ -150,9 +192,11 @@ function ChatList() {
                 </div>
 
                 <div className="flex-1 min-w-0">
+                  {/* 상대방 아이디 */}
                   <p style={{ color: currentColor }} className="text-sm font-bold truncate">
                     @{room.otherEmail?.split("@")[0]}
                   </p>
+                  {/* 마지막 메시지 미리보기 */}
                   <p className="text-xs text-gray-400 truncate">{room.lastMessage}</p>
                 </div>
 
@@ -161,13 +205,13 @@ function ChatList() {
                   <span style={{ color: currentColor }} className="text-xs">
                     {formatTime(room.lastMessageAt)}
                   </span>
-                  {/* [수정] 읽지 않은 메시지 수 - 0보다 클때만 표시 */}
+                  {/* 읽지 않은 메시지 뱃지 - unreadCount가 1 이상일 때만 표시 */}
                   {room.unreadCount > 0 && (
                     <span
                       style={{ backgroundColor: currentColor }}
                       className="text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
                     >
-                      {room.unreadCount}
+                      N
                     </span>
                   )}
                 </div>
