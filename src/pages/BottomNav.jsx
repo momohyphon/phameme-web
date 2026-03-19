@@ -93,7 +93,7 @@ function BottomNav() {
               className="flex-1 text-center relative"
             >
               <span className="relative inline-block">
-                <span className="text-xs">SNS</span>
+                <span className="text-xs">Chat</span>
                 {/* 읽지 않은 메시지 수 - 0보다 클 때만 표시 */}
                 {unreadCount > 0 && (
                   <span
@@ -111,14 +111,14 @@ function BottomNav() {
               style={{ color: currentColor }}
               className="flex-1 text-center"
             >
-              <span className="text-xs">Upload</span>
+              <span className="text-xs">Sell Items</span>
             </button>
             <button
               onClick={() => navigate("/mypage")}
               style={{ color: currentColor }}
               className="flex-1 text-center"
             >
-              <span className="text-xs">Member</span>
+              <span className="text-xs">Profile</span>
             </button>
           </div>
         </div>

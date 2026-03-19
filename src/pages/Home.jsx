@@ -222,7 +222,7 @@ function Home() {
                         }
                         className="border px-2 py-0.5 rounded-full text-xs transition"
                       >
-                        SNS
+                        Chat
                       </button>
                     </div>
 
