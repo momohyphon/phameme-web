@@ -301,7 +301,7 @@ function ChatRoom() {
           // 엔터키로도 전송 가능
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           style={{ borderColor: currentColor }}
-          className="flex-1 border rounded-full px-3 py-3 text-xs outline-none"
+          className="flex-1 border rounded-full px-3 py-3 text-base outline-none"
         />
         <button
           onClick={handleSend}
