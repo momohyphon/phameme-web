@@ -1,16 +1,16 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  collection,      // Firestore 컬렉션 참조 생성 함수
-  getDocs,         // Firestore 컬렉션 전체 문서 1회 조회 함수
-  query,           // Firestore 쿼리 생성 함수
-  getDoc,          // Firestore 단일 문서 1회 조회 함수
-  doc,             // Firestore 문서 참조 생성 함수
-  setDoc,          // Firestore 문서 생성/덮어쓰기 함수
-  deleteDoc,       // Firestore 문서 삭제 함수
-  where,           // Firestore 쿼리 조건 함수
-  onSnapshot,      // Firestore 실시간 구독 함수
-  updateDoc,       // Firestore 문서 특정 필드만 업데이트 함수
+  collection, // Firestore 컬렉션 참조 생성 함수
+  getDocs, // Firestore 컬렉션 전체 문서 1회 조회 함수
+  query, // Firestore 쿼리 생성 함수
+  getDoc, // Firestore 단일 문서 1회 조회 함수
+  doc, // Firestore 문서 참조 생성 함수
+  setDoc, // Firestore 문서 생성/덮어쓰기 함수
+  deleteDoc, // Firestore 문서 삭제 함수
+  where, // Firestore 쿼리 조건 함수
+  onSnapshot, // Firestore 실시간 구독 함수
+  updateDoc, // Firestore 문서 특정 필드만 업데이트 함수
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { auth } from "../firebase";
@@ -37,6 +37,14 @@ function Home() {
   const [showInfoModal, setShowInfoModal] = useState(false);
   // 모달에 표시할 카드 정보 - 클릭한 카드의 아이템 정보 저장
   const [modalCard, setModalCard] = useState(null);
+  // AI 가격 팝업 표시 여부
+  const [showAiModal, setShowAiModal] = useState(false);
+  // AI 가격 팝업에 표시할 카드 정보
+  const [aiModalCard, setAiModalCard] = useState(null);
+  // 카드 id별 AI 추정 가격 문자열 맵
+  const [aiPrices, setAiPrices] = useState({});
+  // 이미 요청한 카드 id 기록 - 중복 요청 방지
+  const fetchedCardIds = useRef(new Set());
 
   // 로그인 상태 감지
   useEffect(() => {
@@ -63,8 +71,13 @@ function Home() {
     );
     const unsub = onSnapshot(q, (snapshot) => {
       const uids = snapshot.docs
-        .filter((d) => d.data().unreadBy && d.data().unreadBy.includes(currentUser.uid))
-        .map((d) => d.data().participants.find((uid) => uid !== currentUser.uid));
+        .filter(
+          (d) =>
+            d.data().unreadBy && d.data().unreadBy.includes(currentUser.uid),
+        )
+        .map((d) =>
+          d.data().participants.find((uid) => uid !== currentUser.uid),
+        );
       setUnreadUids(uids);
     });
     return () => unsub();
@@ -72,7 +85,10 @@ function Home() {
 
   // 팔로우/언팔로우 처리 함수
   const handleFollow = async (targetUserId) => {
-    if (!currentUser) { navigate("/login"); return; }
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
     const followId = `${currentUser.uid}_${targetUserId}`;
     const followRef = doc(db, "follows", followId);
     if (followMap[targetUserId]) {
@@ -90,11 +106,19 @@ function Home() {
 
   // 채팅방 이동 함수
   const handleChat = async (targetUserId) => {
-    if (!currentUser) { navigate("/login"); return; }
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
     const chatsSnap = await getDocs(
-      query(collection(db, "chats"), where("participants", "array-contains", currentUser.uid))
+      query(
+        collection(db, "chats"),
+        where("participants", "array-contains", currentUser.uid),
+      ),
     );
-    const existing = chatsSnap.docs.find((d) => d.data().participants.includes(targetUserId));
+    const existing = chatsSnap.docs.find((d) =>
+      d.data().participants.includes(targetUserId),
+    );
     if (existing) {
       navigate(`/chatroom/${existing.id}`);
     } else {
@@ -107,7 +131,39 @@ function Home() {
     const newViews = (currentViews || 0) + 1;
     await updateDoc(doc(db, "categories", cardId), { views: newViews });
     // 로컬 state도 즉시 업데이트 - Firestore 재조회 없이 UI 반영
-    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, views: newViews } : c)));
+    setCards((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, views: newViews } : c)),
+    );
+  };
+
+  // AI 가격 분석 함수 - Firebase Functions를 통해 Gemini API 호출
+  // imageUrl: 분석할 이미지의 Cloudinary URL
+  // cardId: 결과를 저장할 카드의 Firestore 문서 ID
+  const fetchAiPrice = async (imageUrl, cardId) => {
+    // 이미 분석된 카드는 다시 요청하지 않음
+    if (aiPrices[cardId]) return;
+    // 로딩 상태 표시
+    setAiPrices((prev) => ({ ...prev, [cardId]: "분석 중..." }));
+    try {
+      console.log("Functions 호출 imageUrl:", imageUrl); // 이미지 URL 확인용
+      // Firebase Functions URL 호출 - API 키는 서버에서 관리
+      const response = await fetch(
+        "https://getaiprice-o6bbaw2o6a-uc.a.run.app",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl }), // 이미지 URL만 전달
+        },
+      );
+      console.log("Functions 응답 status:", response.status); // 응답 상태 확인용
+      const data = await response.json();
+      console.log("Functions 응답 data:", data); // 응답 데이터 확인용
+      // 결과 저장
+      setAiPrices((prev) => ({ ...prev, [cardId]: data.price || "분석 불가" }));
+    } catch (err) {
+      console.error("AI Price Fetch Error:", err);
+      setAiPrices((prev) => ({ ...prev, [cardId]: "오류" }));
+    }
   };
 
   // 날짜 포맷 함수
@@ -139,9 +195,13 @@ function Home() {
       const cardsWithPhotos = cardList
         .map((card) => {
           const photos = (card.slots || []).filter(
-            (slot) => slot !== null && typeof slot === "string"
+            (slot) => slot !== null && typeof slot === "string",
           );
-          return { ...card, photos, profilePhoto: profiles[card.userId] || null };
+          return {
+            ...card,
+            photos,
+            profilePhoto: profiles[card.userId] || null,
+          };
         })
         .filter((card) => card.photos.length > 0);
 
@@ -168,15 +228,18 @@ function Home() {
       {/* marquee 애니메이션 CSS 전역 정의 */}
       <style>{`
         @keyframes marquee {
-          0% { transform: translateX(100%); }
+          0% { transform: translateX(100vw); }
           100% { transform: translateX(-100%); }
         }
         .ticker-wrap { overflow: hidden; white-space: nowrap; }
-        .ticker-content { display: inline-block; animation: marquee 14s linear infinite; }
+        .ticker-content { display: inline-block; animation: marquee 20s linear infinite; }
       `}</style>
 
       <header
-        style={{ borderColor: currentColor, transition: "border-color 1s ease" }}
+        style={{
+          borderColor: currentColor,
+          transition: "border-color 1s ease",
+        }}
         className="border-b px-4 pt-6 pb-3 flex justify-between items-center"
       >
         <h1
@@ -186,7 +249,11 @@ function Home() {
           Phameme
         </h1>
         <button
-          style={{ borderColor: currentColor, color: currentColor, transition: "border-color 1s ease, color 1s ease" }}
+          style={{
+            borderColor: currentColor,
+            color: currentColor,
+            transition: "border-color 1s ease, color 1s ease",
+          }}
           className="border px-4 rounded-full transition"
           onClick={() => (currentUser ? signOut(auth) : navigate("/login"))}
         >
@@ -194,7 +261,7 @@ function Home() {
         </button>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-6 pb-32">
+      <main className="w-full py-6 pb-32">
         <div className="space-y-10">
           {cards.length === 0 ? (
             <p style={{ color: currentColor }} className="text-center text-sm">
@@ -212,20 +279,22 @@ function Home() {
                   : unreadUids.includes(card.userId);
 
               // 티커에 표시할 텍스트 조합
-              // 값 있는 항목만 표시, 기타사항은 "기타사항: 클릭시 열람" 고정 문구
               const tickerParts = [
                 card.title ? `제목: ${card.title}` : "",
                 card.productName ? `제품명: ${card.productName}` : "",
                 card.modelName ? `모델명: ${card.modelName}` : "",
                 card.purchaseYear ? `구입년도: ${card.purchaseYear}` : "",
-                card.price ? `판매가격: ${Number(card.price).toLocaleString()}원` : "",
+                card.price
+                  ? `판매가격: ${Number(card.price).toLocaleString()}원`
+                  : "",
                 card.notes ? "기타사항: 클릭시 열람" : "",
-              ].filter(Boolean).join("   |   "); // | 구분자로 연결
+              ]
+                .filter(Boolean)
+                .join("   |   ");
 
               return (
-                <div key={card.id} className="overflow-hidden shadow-md rounded-xl">
-
-                  {/* 카드 상단 - 프로필사진, 아이디, 팔로우, Chat 버튼, 날짜 */}
+                <div key={card.id} className="overflow-hidden">
+                  {/* 카드 상단 */}
                   <div
                     className="flex items-center justify-between px-4 py-2"
                     style={{ backgroundColor: "white" }}
@@ -234,21 +303,31 @@ function Home() {
                       {/* 프로필사진 */}
                       <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
                         {card.profilePhoto && (
-                          <img src={card.profilePhoto} className="w-full h-full object-cover" />
+                          <img
+                            src={card.profilePhoto}
+                            className="w-full h-full object-cover"
+                          />
                         )}
                       </div>
                       {/* 유저 아이디 */}
-                      <span style={{ color: currentColor }} className="text-sm font-semibold">
+                      <span
+                        style={{ color: currentColor }}
+                        className="text-sm font-semibold"
+                      >
                         @{card.userEmail?.split("@")[0]}
                       </span>
-                      {/* 팔로우 버튼 - 내 게시물에는 표시 안함 */}
+                      {/* 팔로우 버튼 */}
                       {currentUser?.uid !== card.userId && (
                         <button
                           onClick={() => handleFollow(card.userId)}
                           style={{
                             borderColor: currentColor,
-                            color: followMap[card.userId] ? "white" : currentColor,
-                            backgroundColor: followMap[card.userId] ? currentColor : "transparent",
+                            color: followMap[card.userId]
+                              ? "white"
+                              : currentColor,
+                            backgroundColor: followMap[card.userId]
+                              ? currentColor
+                              : "transparent",
                             minWidth: "3.5rem",
                             textAlign: "center",
                           }}
@@ -266,8 +345,20 @@ function Home() {
                         }
                         style={
                           hasDmAlert
-                            ? { backgroundColor: currentColor, color: "white", borderColor: currentColor, minWidth: "3.5rem", textAlign: "center" }
-                            : { backgroundColor: "transparent", color: currentColor, borderColor: currentColor, minWidth: "3.5rem", textAlign: "center" }
+                            ? {
+                                backgroundColor: currentColor,
+                                color: "white",
+                                borderColor: currentColor,
+                                minWidth: "3.5rem",
+                                textAlign: "center",
+                              }
+                            : {
+                                backgroundColor: "transparent",
+                                color: currentColor,
+                                borderColor: currentColor,
+                                minWidth: "3.5rem",
+                                textAlign: "center",
+                              }
                         }
                         className="border px-2 py-0.5 rounded-full text-xs transition"
                       >
@@ -281,7 +372,7 @@ function Home() {
                   </div>
 
                   <div className="relative">
-                    {/* 이미지 컨테이너 - 4:5.8 비율 고정, 스와이프로 사진 전환 */}
+                    {/* 이미지 컨테이너 */}
                     <div
                       className="w-full overflow-hidden cursor-grab"
                       style={{ aspectRatio: "4/5.8" }}
@@ -289,13 +380,26 @@ function Home() {
                         e.currentTarget.dataset.startX = e.touches[0].clientX;
                       }}
                       onTouchEnd={(e) => {
-                        const startX = parseFloat(e.currentTarget.dataset.startX || 0);
+                        const startX = parseFloat(
+                          e.currentTarget.dataset.startX || 0,
+                        );
                         const diff = startX - e.changedTouches[0].clientX;
                         if (Math.abs(diff) < 50) return;
                         setActiveIndex((prev) => {
                           const current = prev[card.id] ?? 0;
-                          if (diff > 0) return { ...prev, [card.id]: Math.min(current + 1, card.photos.length - 1) };
-                          else return { ...prev, [card.id]: Math.max(current - 1, 0) };
+                          if (diff > 0)
+                            return {
+                              ...prev,
+                              [card.id]: Math.min(
+                                current + 1,
+                                card.photos.length - 1,
+                              ),
+                            };
+                          else
+                            return {
+                              ...prev,
+                              [card.id]: Math.max(current - 1, 0),
+                            };
                         });
                       }}
                       onMouseDown={(e) => {
@@ -306,13 +410,26 @@ function Home() {
                       onMouseUp={(e) => {
                         if (e.currentTarget.dataset.dragging !== "true") return;
                         e.currentTarget.dataset.dragging = "false";
-                        const startX = parseFloat(e.currentTarget.dataset.startX || 0);
+                        const startX = parseFloat(
+                          e.currentTarget.dataset.startX || 0,
+                        );
                         const diff = startX - e.clientX;
                         if (Math.abs(diff) < 50) return;
                         setActiveIndex((prev) => {
                           const current = prev[card.id] ?? 0;
-                          if (diff > 0) return { ...prev, [card.id]: Math.min(current + 1, card.photos.length - 1) };
-                          else return { ...prev, [card.id]: Math.max(current - 1, 0) };
+                          if (diff > 0)
+                            return {
+                              ...prev,
+                              [card.id]: Math.min(
+                                current + 1,
+                                card.photos.length - 1,
+                              ),
+                            };
+                          else
+                            return {
+                              ...prev,
+                              [card.id]: Math.max(current - 1, 0),
+                            };
                         });
                       }}
                       onMouseLeave={(e) => {
@@ -325,48 +442,75 @@ function Home() {
                       />
                     </div>
 
-                    {/* 오른쪽 사이드 썸네일 - 사진 2장 이상일 때만 표시 */}
+                    {/* 오른쪽 사이드 썸네일 */}
                     {card.photos.length > 1 && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
                         {card.photos.map((url, idx) => (
                           <button
                             key={idx}
-                            onClick={() => setActiveIndex((prev) => ({ ...prev, [card.id]: idx }))}
+                            onClick={() =>
+                              setActiveIndex((prev) => ({
+                                ...prev,
+                                [card.id]: idx,
+                              }))
+                            }
                             className="flex-shrink-0"
                           >
                             <div
-                              style={{ border: idx === currentIdx ? `2px solid ${currentColor}` : "none" }}
+                              style={{
+                                border:
+                                  idx === currentIdx
+                                    ? `2px solid ${currentColor}`
+                                    : "none",
+                              }}
                               className="w-10 h-10 rounded-full overflow-hidden"
                             >
-                              <img src={url} className="w-full h-full object-cover" />
+                              <img
+                                src={url}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                           </button>
                         ))}
                       </div>
                     )}
 
-                    {/* 하단 그라데이션 오버레이 - AI 라벨과 조회수 표시 */}
+                    {/* 하단 그라데이션 오버레이 */}
                     <div
                       className="absolute bottom-0 left-0 z-10 w-full px-4 py-3 flex justify-between items-center"
-                      style={{ background: "linear-gradient(to top, rgba(0,0,0,0.4), transparent)" }}
+                      style={{
+                        background:
+                          "linear-gradient(to top, rgba(0,0,0,0.4), transparent)",
+                      }}
                     >
-                      <span style={{ color: currentColor }} className="text-sm drop-shadow font-semibold">AI</span>
-                      <span style={{ color: currentColor }} className="text-xs drop-shadow font-semibold">
+                      {/* AI 가격보기 버튼 */}
+                      <button
+                        onClick={() => {
+                          setAiModalCard(card);
+                          setShowAiModal(true);
+                          fetchAiPrice(card.photos[0], card.id);
+                        }}
+                        style={{ color: currentColor }}
+                        className="text-sm drop-shadow font-semibold bg-transparent border-none cursor-pointer p-0"
+                      >
+                        AI 가격보기
+                      </button>
+                      <span
+                        style={{ color: currentColor }}
+                        className="text-xs drop-shadow font-semibold"
+                      >
                         조회수 {card.views || 0}
                       </span>
                     </div>
                   </div>
 
-                  {/* 티커 영역 - 아이템 정보 있을때만 표시
-                      클릭시 조회수 +1 + 판매 정보 모달 표시 */}
+                  {/* 티커 영역 */}
                   {tickerParts && (
                     <div
                       className="ticker-wrap px-2 py-2 cursor-pointer"
                       style={{ borderTop: `1px solid ${currentColor}` }}
                       onClick={() => {
-                        // 조회수 증가
                         handleViewCount(card.id, card.views);
-                        // 모달에 표시할 카드 정보 저장 후 모달 열기
                         setModalCard(card);
                         setShowInfoModal(true);
                       }}
@@ -386,8 +530,7 @@ function Home() {
         </div>
       </main>
 
-      {/* 판매 정보 모달 - 티커 클릭시 표시
-          네온 색상 테마로 디자인된 알림창 형태 */}
+      {/* 판매 정보 모달 */}
       {showInfoModal && modalCard && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
@@ -399,7 +542,6 @@ function Home() {
             style={{ border: `2px solid ${currentColor}` }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 모달 헤더 - 네온 배경색 */}
             <div
               className="px-5 py-3"
               style={{ backgroundColor: currentColor }}
@@ -408,64 +550,114 @@ function Home() {
                 {modalCard.title || "판매 정보"}
               </p>
             </div>
-
-            {/* 모달 본문 - 각 항목 행으로 표시 */}
             <div className="px-5 py-4 space-y-3">
-              {/* 제품명 */}
               {modalCard.productName && (
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-400">제품명</span>
-                  <span style={{ color: currentColor }} className="text-xs font-semibold">
+                  <span
+                    style={{ color: currentColor }}
+                    className="text-xs font-semibold"
+                  >
                     {modalCard.productName}
                   </span>
                 </div>
               )}
-              {/* 모델명 */}
               {modalCard.modelName && (
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-400">모델명</span>
-                  <span style={{ color: currentColor }} className="text-xs font-semibold">
+                  <span
+                    style={{ color: currentColor }}
+                    className="text-xs font-semibold"
+                  >
                     {modalCard.modelName}
                   </span>
                 </div>
               )}
-              {/* 구입년도 */}
               {modalCard.purchaseYear && (
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-400">구입년도</span>
-                  <span style={{ color: currentColor }} className="text-xs font-semibold">
+                  <span
+                    style={{ color: currentColor }}
+                    className="text-xs font-semibold"
+                  >
                     {modalCard.purchaseYear}
                   </span>
                 </div>
               )}
-              {/* 판매가격 */}
               {modalCard.price && (
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-400">판매가격</span>
-                  <span style={{ color: currentColor }} className="text-xs font-bold text-base">
+                  <span className="text-xs text-gray.400">판매가격</span>
+                  <span
+                    style={{ color: currentColor }}
+                    className="text-xs font-bold text-base"
+                  >
                     {Number(modalCard.price).toLocaleString()}원
                   </span>
                 </div>
               )}
-              {/* 구분선 */}
               {modalCard.notes && (
-                <div style={{ borderTop: `1px solid ${currentColor}` }} className="opacity-30" />
+                <div
+                  style={{ borderTop: `1px solid ${currentColor}` }}
+                  className="opacity-30"
+                />
               )}
-              {/* 기타사항 */}
               {modalCard.notes && (
                 <div>
                   <p className="text-xs text-gray-400 mb-1">기타사항</p>
-                  <p style={{ color: currentColor }} className="text-xs leading-relaxed">
+                  <p
+                    style={{ color: currentColor }}
+                    className="text-xs leading-relaxed"
+                  >
                     {modalCard.notes}
                   </p>
                 </div>
               )}
             </div>
-
-            {/* 모달 하단 - 닫기 버튼 */}
             <div className="px-5 pb-4">
               <button
                 onClick={() => setShowInfoModal(false)}
+                style={{ backgroundColor: currentColor }}
+                className="w-full text-white text-xs py-2 rounded-full"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 가격 팝업 모달 */}
+      {showAiModal && aiModalCard && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onClick={() => setShowAiModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-72 overflow-hidden"
+            style={{ border: `2px solid ${currentColor}` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="px-5 py-3"
+              style={{ backgroundColor: currentColor }}
+            >
+              <p className="text-white text-sm font-bold text-center">
+                AI 중고가 추정
+              </p>
+            </div>
+            <div className="px-5 py-6 flex flex-col items-center gap-2">
+              <p className="text-xs text-gray-400">Gemini AI 추정 중고 시세</p>
+              <p
+                style={{ color: currentColor }}
+                className="text-lg font-bold text-center"
+              >
+                {aiPrices[aiModalCard.id] || "분석 중..."}
+              </p>
+            </div>
+            <div className="px-5 pb-4">
+              <button
+                onClick={() => setShowAiModal(false)}
                 style={{ backgroundColor: currentColor }}
                 className="w-full text-white text-xs py-2 rounded-full"
               >
